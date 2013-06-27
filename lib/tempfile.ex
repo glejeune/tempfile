@@ -1,0 +1,106 @@
+defmodule Tempfile do
+  defexception IOError, message: "unknown error", can_retry: false do
+    def full_message(me) do
+      "Tempfile failed: #{me.message}, retriable: #{me.can_retry}"
+    end 
+  end
+
+  defrecord File, io: nil, path: nil, is_open: false
+
+  defp randstring(size) do
+    chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+    Enum.reduce 0..size, "", fn(_, acc) -> acc <> String.at(chars, :random.uniform(String.length(chars)) - 1) end
+  end
+
+  @doc """
+  Creates a new Tempfile.
+  """
+  def open do
+    open("tmp", [:write])
+  end
+  def open(ext) when is_bitstring(ext) do
+    open(ext, [:write])
+  end
+  def open(options) when is_list(options) do
+    open("tmp", options)
+  end
+  def open(ext, options) do
+    {x, y, z} = :erlang.now
+    :random.seed(x, y, z)
+    tmp_path = Path.join("tmp_" <> System.tmp_dir, randstring(20) <> "." <> ext)
+    case Elixir.File.open(tmp_path, options) do
+      {:ok, io} -> Tempfile.File[io: io, path: tmp_path, is_open: true]
+      {:error, reason} -> raise Tempfile.IOError, message: reason
+    end
+  end
+
+  @doc """
+  Returns the full path name of the temporary file. This will be nil if unlink has been called.
+  """
+  def path(tempfile) do
+    tempfile.path
+  end
+
+  @doc """
+  Closes the file.
+  """
+  def close(tempfile) do
+    if tempfile.is_open do
+      Elixir.File.close(tempfile.io)
+      tempfile = tempfile.is_open false
+    end
+  end
+
+  @doc """
+  Unlinks (deletes) the file from the filesystem.
+  """
+  def unlink(tempfile) do
+    close tempfile
+    case Elixir.File.rm(tempfile.path) do
+      {:error, :enoent} -> raise Tempfile.IOError, message: "The file does not exist"
+      {:error, :eacces} -> raise Tempfile.IOError, message: "Missing permission for the file or one of its parents"
+      {:error, :eperm} -> raise Tempfile.IOError, message: "The file is a directory and user is not super-user"
+      {:error, :enotdir} -> raise Tempfile.IOError, message: "A component of the file name is not a directory"
+      {:error, :einval} -> raise Tempfile.IOError, message: "Filename had an improper type"
+      :ok -> true
+    end
+    tempfile = tempfile.path nil
+    tempfile = tempfile.io nil
+    tempfile = tempfile.is_open false
+  end
+
+  @doc """
+  Return true if the tempfile is open
+  """
+  def open?(tempfile) do
+    tempfile.is_open
+  end
+
+  @doc """
+  Return true if the tempfile exists
+  """
+  def exists?(tempfile) do
+    tempfile.path != nil and Elixir.File.exists?(tempfile.path)
+  end
+
+  @doc """
+  Writes the given argument to the given tempfile as a binary, no unicode conversion happens.
+  """
+  def binwrite(tempfile, item) do
+    unless tempfile.is_open do
+      raise Tempfile.IOError, message: "File is not open"
+    end
+    IO.binwrite tempfile.io, item
+  end
+
+  @doc """
+  Writes the given argument to the given device. By default the device is the standard output. 
+  The argument is expected to be a chardata (i.e. a char list or an unicode binary).
+  """
+  def write(tempfile, item) do
+    unless tempfile.is_open do
+      raise Tempfile.IOError, message: "File is not open"
+    end
+    IO.write tempfile.io, item
+  end
+end
