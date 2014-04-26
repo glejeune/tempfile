@@ -33,7 +33,7 @@ defmodule Tempfile do
   """
   def get_name(prefix, options) do
     ext = options[:ext] || ".tmp"
-    unless Regex.match?(%r/^\./, ext) do
+    unless Regex.match?(~r/^\./, ext) do
       ext = "." <> ext
     end
     path = options[:path] || System.tmp_dir
