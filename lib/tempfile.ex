@@ -1,11 +1,16 @@
-defmodule Tempfile do
-  defexception IOError, message: "unknown error", can_retry: false do
-    def full_message(me) do
-      "Tempfile failed: #{me.message}, retriable: #{me.can_retry}"
-    end 
+defmodule IOError do
+  defexception [:message]
+
+  def exception(value) do
+    msg = "Tempfile failed: #{inspect value}"
+    %IOError{message: msg}
   end
 
-  defrecord File, io: nil, path: nil, is_open: false
+end
+
+defmodule Tempfile do
+  require Record
+  Record.defrecord File, io: nil, path: nil, is_open: false
 
   defp randstring(size) do
     chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
