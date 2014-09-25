@@ -1,12 +1,14 @@
-defmodule Tempfile do
-  defexception IOError, message: "unknown error", can_retry: false do
-    def full_message(me) do
+defmodule Tempfile.IOError do
+    defexception [message: "unknown error", can_retry: false]
+      
+    def message(me) do
       "Tempfile failed: #{me.message}, retriable: #{me.can_retry}"
     end 
-  end
+end
 
-  defrecord File, io: nil, path: nil, is_open: false
-
+defmodule Tempfile do
+  require Record
+  Record.defrecord :file, [io: nil, path: nil, is_open: false]
   defp randstring(size) do
     chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
     Enum.reduce 0..size, "", fn(_, acc) -> acc <> String.at(chars, :random.uniform(String.length(chars)) - 1) end
@@ -49,12 +51,16 @@ defmodule Tempfile do
     get_name("", [])
   end
 
+  def is_open(tempfile) do
+    if nil == tempfile do 
+      raise ArgumentError, message: "tempfile must not be nil"
+    end
+    file(tempfile, :is_open)
+  end
+
   @doc """
   Creates a new Tempfile.
   """
-  def open do
-    open("tmp", [:write])
-  end
   def open(ext) when is_bitstring(ext) do
     open(ext, [:write])
   end
@@ -66,9 +72,12 @@ defmodule Tempfile do
     :random.seed(x, y, z)
     tmp_path = get_name("tmp", [ext: ext])
     case Elixir.File.open(tmp_path, options) do
-      {:ok, io} -> Tempfile.File[io: io, path: tmp_path, is_open: true]
+      {:ok, io} -> file io: io, path: tmp_path, is_open: true
       {:error, reason} -> raise Tempfile.IOError, message: reason
     end
+  end
+  def open do
+    open("tmp", [:write])
   end
 
   @doc """
@@ -78,7 +87,7 @@ defmodule Tempfile do
     if nil == tempfile do 
       raise ArgumentError, message: "tempfile must not be nil"
     end
-    tempfile.path
+    file(tempfile, :path)
   end
 
   @doc """
@@ -94,9 +103,9 @@ defmodule Tempfile do
     if nil == tempfile do 
       raise ArgumentError, message: "tempfile must not be nil"
     end
-    if tempfile.is_open do
-      Elixir.File.close(tempfile.io)
-      tempfile = tempfile.is_open false
+    if file(tempfile, :is_open) do
+      Elixir.File.close(file(tempfile, :io))
+      tempfile = file(tempfile, is_open: false)
     end
     if unlnk do
       tempfile = unlink(tempfile)
@@ -112,7 +121,7 @@ defmodule Tempfile do
       raise ArgumentError, message: "tempfile must not be nil"
     end
     close tempfile
-    case Elixir.File.rm(tempfile.path) do
+    case Elixir.File.rm(file(tempfile, :path)) do
       {:error, :enoent} -> raise Tempfile.IOError, message: "The file does not exist"
       {:error, :eacces} -> raise Tempfile.IOError, message: "Missing permission for the file or one of its parents"
       {:error, :eperm} -> raise Tempfile.IOError, message: "The file is a directory and user is not super-user"
@@ -120,9 +129,8 @@ defmodule Tempfile do
       {:error, :einval} -> raise Tempfile.IOError, message: "Filename had an improper type"
       :ok -> true
     end
-    tempfile = tempfile.path nil
-    tempfile = tempfile.io nil
-    tempfile = tempfile.is_open false
+    tempfile = file(tempfile, io: nil)
+    file(tempfile, is_open: false)
   end
 
   @doc """
@@ -132,7 +140,7 @@ defmodule Tempfile do
     if nil == tempfile do 
       raise ArgumentError, message: "tempfile must not be nil"
     end
-    tempfile.is_open
+    file(tempfile, :is_open)
   end
 
   @doc """
@@ -142,7 +150,8 @@ defmodule Tempfile do
     if nil == tempfile do 
       raise ArgumentError, message: "tempfile must not be nil"
     end
-    tempfile.path != nil and Elixir.File.exists?(tempfile.path)
+    tempfile != nil and Elixir.File.exists?(file(tempfile, :path))
+    #tempfile.path != nil and Elixir.File.exists?(tempfile.path)
   end
 
   @doc """
@@ -152,7 +161,7 @@ defmodule Tempfile do
     if nil == tempfile do 
       raise ArgumentError, message: "tempfile must not be nil"
     end
-    case Elixir.File.stat(tempfile.path) do
+    case Elixir.File.stat(file(tempfile, :path)) do
       {:ok, info} -> info
       {:error, reason} -> raise Tempfile.IOError, message: reason
     end
@@ -165,10 +174,10 @@ defmodule Tempfile do
     if nil == tempfile do 
       raise ArgumentError, message: "tempfile must not be nil"
     end
-    unless tempfile.is_open do
+    unless file(tempfile, :is_open) do
       raise Tempfile.IOError, message: "File is not open"
     end
-    IO.binwrite tempfile.io, item
+    IO.binwrite file(tempfile, :io), item
   end
 
   @doc """
@@ -179,9 +188,9 @@ defmodule Tempfile do
     if nil == tempfile do 
       raise ArgumentError, message: "tempfile must not be nil"
     end
-    unless tempfile.is_open do
+    unless file(tempfile, :is_open) do
       raise Tempfile.IOError, message: "File is not open"
     end
-    IO.write tempfile.io, item
+    IO.write file(tempfile, :io), item
   end
 end
